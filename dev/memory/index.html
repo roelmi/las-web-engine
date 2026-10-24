@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>LAS Dev v0.6</title><style>body{background:#071725;color:#f1f7ff;font:16px system-ui;margin:0;padding:20px}main{max-width:720px;margin:auto}section{background:#152d42;border-radius:16px;padding:20px}button{padding:14px;background:#74e5b3;border:0;border-radius:9px;font-weight:700;margin:4px}pre{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}a{color:#92d8ff}</style></head><body><main><p>LAS WEB ENGINE / DEVELOPMENT</p><h1>Guest Memory Microport v0.6</h1><p>Experimental 64-bit guest address translation in a compiled C-to-WebAssembly module. Not the full LASRecomp runtime or Zelda.</p><section><button id="test">Run 10 memory tests</button><button id="copy">Copy report</button><h2 id="status">Not tested</h2><pre id="report">Tap Run to begin.</pre></section><p>Bounded 1 MiB guest region at 0x7100000000. Uses offsets into WebAssembly memory, not native host pointers. No large allocation.</p><p><a href="../../">Main game</a> · <a href="guest_memory.c">C source</a></p></main><script>
+const wasm64="AGFzbQEAAAABEANgAn5/AX9gAX4Bf2AAAX8DBgUAAQABAgQFAXABAQEFAwEAEgYJAX8BQYCIxAALBzcGBm1lbW9yeQIAB3N0b3JlMzIAAAZsb2FkMzIAAQV2YWxpZAACBGJ5dGUAAwhjYXBhY2l0eQAECr4CBW0BAn9BACECAkAgAEKDgMD/73F8QoOAQFQNACAApyIDQX9GDQAgA0GBiICAAGogAUEIdjoAACADQYCIgIAAaiABOgAAIANBgoiAgABqIAFBEHY6AAAgA0GDiICAAGogAUEYdjoAAEEBIQILIAILZgECf0EAIQECQCAAQoOAwP/vcXxCg4BAVA0AIACnIgJBf0YNACACQYOIgIAAai0AAEEYdCACQYKIgIAAai0AAEEQdCACQYGIgIAAai0AAEEIdCACQYCIgIAAai0AAHJyciEBCyABCygAIACnQX9HIABCgICAgPBxfEKBgMAAVEKAgMCAkA4gAH0gAa1acXELNgECf0F/IQECQCAAQoCAwP/vcXxCgIBAVA0AIACnIgJBf0YNACACQYCIgIAAai0AACEBCyABCwcAQYCAwAAL";let report='Not tested';
+document.querySelector('#test').onclick=async()=>{try{const binary=Uint8Array.from(atob(wasm64),x=>x.charCodeAt(0));const {instance}=await WebAssembly.instantiate(binary);const m=instance.exports,b=0x7100000000n;const tests=[
+['region size',()=>m.capacity()===1048576],
+['valid start',()=>m.valid(b,4)===1],
+['valid end',()=>m.valid(b+1048572n,4)===1],
+['reject address below',()=>m.valid(b-1n,1)===0],
+['reject address above',()=>m.valid(b+1048576n,1)===0],
+['reject crossing boundary',()=>m.valid(b+1048574n,4)===0],
+['store LE32',()=>m.store32(b+20n,0x12345678)===1],
+['load LE32',()=>m.load32(b+20n)===0x12345678],
+['little-endian bytes',()=>m.byte(b+20n)===0x78&&m.byte(b+21n)===0x56],
+['reject invalid store',()=>m.store32(b-4n,0x55667788)===0]];
+let good=0,lines=[];for(const [name,fn] of tests){const ok=fn();good+=Number(ok);lines.push((ok?'PASS':'FAIL')+' | '+name);}report='LAS Web Engine v0.6\n'+good+'/10 passed\n'+navigator.userAgent+'\n'+lines.join('\n');document.querySelector('#status').textContent=good+'/10 passed';document.querySelector('#report').textContent=report;}catch(e){report='ERROR: '+e.message;document.querySelector('#status').textContent='ERROR';document.querySelector('#report').textContent=report;}};
+document.querySelector('#copy').onclick=async()=>{try{await navigator.clipboard.writeText(report);document.querySelector('#copy').textContent='Copied';}catch(e){alert(report)}};
+</script></body></html>
