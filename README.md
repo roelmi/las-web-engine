@@ -1,4 +1,5 @@
-# LAS Web Engine — Island Trial v0.1
+[README.md](https://github.com/user-attachments/files/33915433/README.md)
+# LAS Web Engine — Island Trial v0.2
 
 A self-contained, original WebGL2 3D adventure proof-of-concept for Safari on iPhone 12 Pro Max and desktop browsers. **This is not Zelda, not an LAS Recomp port, and does not play Nintendo game files.** It tests the browser rendering, controls, basic physics/collision, collecting objectives, enemies, gamepad input, and FPS.
 
@@ -26,6 +27,16 @@ No Mac, app store, build process, CDN, dependencies, streaming server, or remote
 - iPhone: joystick, A attack, B dash, pause.
 - Desktop: WASD / arrows, Space attack, Shift dash.
 - Standard gamepad: left stick move, button A attack, B dash.
+
+## Performance improvements in v0.2
+
+- Merged static ground tiles into one GPU mesh, replacing hundreds of per-frame terrain draw calls.
+- Auto quality mode reduces internal pixel resolution when sustained FPS is low, and gently raises it when sustained performance improves.
+- Cap pixel density for Safari; presets for Balanced, High, and Battery saver remain available.
+- Reuse typed matrix buffers and reset touch/keyboard state after tab backgrounding.
+- No new network requests, assets, dependencies or telemetry.
+
+Performance improvement is expected but has not yet been benchmarked on an actual iPhone 12 Pro Max.
 
 ## Current limitations and next steps toward LAS Recomp
 
