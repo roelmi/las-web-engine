@@ -11,12 +11,12 @@ check("write operands to guest memory",()=>m.store32(base+0n,0x7fffffff)===1&&m.
 check("CPU adds two guest values",()=> (c.adds32(m.load32(base+0n),m.load32(base+4n))>>>0)===0x80000000);
 check("overflow NZCV preserved",()=>c.flags()>>>0===0x90000000);
 check("write result to guest memory",()=>m.store32(base+8n,c.adds32(m.load32(base+0n),m.load32(base+4n)))===1);
-check("read back computed result",()=>m.load32(base+8n)===0x80000000);
+check("read back computed result",()=>(m.load32(base+8n)>>>0)===0x80000000);
 check("CPU subtract result and operand",()=> (c.subs32(m.load32(base+8n),m.load32(base+4n))>>>0)===0x7fffffff);
 check("subtraction overflow flags",()=>c.flags()>>>0===0x30000000);
 check("reject out-of-bounds read range",()=>m.valid(base+1048574n,4)===0);
 check("reject out-of-bounds result write",()=>m.store32(base+1048574n,123)===0);
-check("guest data remains unchanged",()=>m.load32(base+0n)===0x7fffffff&&m.load32(base+4n)===1&&m.load32(base+8n)===0x80000000);
+check("guest data remains unchanged",()=>m.load32(base+0n)===0x7fffffff&&m.load32(base+4n)===1&&(m.load32(base+8n)>>>0)===0x80000000);
 report="LAS Web Engine v0.7\n"+okCount+"/12 passed\n"+navigator.userAgent+"\n"+log.join("\n");
 document.querySelector('#status').textContent=okCount+"/12 passed";document.querySelector('#out').textContent=report;
 }catch(e){report="ERROR: "+e.message;document.querySelector('#status').textContent="ERROR";document.querySelector('#out').textContent=report;}};
