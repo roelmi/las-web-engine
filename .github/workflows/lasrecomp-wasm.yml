@@ -20,6 +20,7 @@ jobs:
         run: python dev/recomp-port/make_synthetic_nso.py
       - name: Generate C using upstream generator
         run: |
+          set -o pipefail
           mkdir -p generated
           python upstream/tools/gen.py fixture synthetic.nso 0x7100000000 generated --simd=c --chunk 8 2>&1 | tee generator.log
       - name: Inspect generated function for traps
@@ -29,30 +30,15 @@ jobs:
             echo "::error::Generator emitted unsupported-instruction traps. Cannot claim working function."
             exit 1
           fi
-      - name: Install WASI C library headers
+      - name: Install WASI libc
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y wasi-libc
-          dpkg -L wasi-libc | grep '/string.h
+          dpkg -L wasi-libc | grep '/string.h$'
       - name: Compile generated C into WASM object
         run: |
           clang --version
           clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -O2 -c -I upstream/runtime generated/fixture_000.c -o generated/fixture_000.wasm.o
-          file generated/fixture_000.wasm.o
-      - name: Publish diagnostic artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lasrecomp-generated-wasm-diagnostics
-          path: |
-            generator.log
-            generated/
-          if-no-files-found: warn
-
-      - name: Compile generated C into WASM object
-        run: |
-          clang --version
-          clang --target=wasm32-wasi --sysroot=/usr/share/wasi-sysroot -O2 -c -I upstream/runtime generated/fixture_000.c -o generated/fixture_000.wasm.o
           file generated/fixture_000.wasm.o
       - name: Publish diagnostic artifacts
         if: always()
