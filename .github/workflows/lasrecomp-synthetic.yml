@@ -1,0 +1,37 @@
+name: LASRecomp synthetic NSO generator test
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Clone upstream
+        run: git clone --depth 1 https://github.com/Nycolazs/LASRecomp-Android-Plus.git upstream
+      - name: Dependencies
+        run: python -m pip install unicorn lz4 capstone
+      - name: Generate copyright-free test NSO
+        run: python dev/recomp-port/make_synthetic_nso.py
+      - name: Verify NSO parser
+        run: python upstream/tools/nso.py synthetic.nso
+      - name: Run original gen.py using portable C
+        run: |
+          mkdir -p generated
+          python upstream/tools/gen.py fixture synthetic.nso 0x7100000000 generated --simd=c --chunk 8
+          ls -lah generated
+          test -f generated/fixture_table.c
+      - name: Upload generated C for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-recompiler-output
+          path: |
+            synthetic.nso
+            generated/
+          if-no-files-found: warn
