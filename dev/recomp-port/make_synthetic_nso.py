@@ -12,7 +12,7 @@ u32(4,0x300)
 u32(0x100,0x52800540) # mov w0,#42
 u32(0x104,0xd65f03c0) # ret
 image[0x300:0x304]=b"MOD0"
-for n,target in enumerate([0x340,0x600,0x600,0x600,0x600,0x600]):
+for n,target in enumerate([0x340,0x600,0x600,0,0,0]):
     struct.pack_into("<i",image,0x304+n*4,target-0x300)
 # Dynamic table: DT_STRTAB, DT_SYMTAB, DT_HASH, DT_NULL
 for i,(tag,val) in enumerate([(5,0x440),(6,0x480),(4,0x4c0),(0,0)]):
