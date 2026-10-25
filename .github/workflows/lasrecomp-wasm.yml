@@ -38,7 +38,11 @@ jobs:
       - name: Compile generated C into WASM object
         run: |
           clang --version
-          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -O2 -c -I upstream/runtime generated/fixture_000.c -o generated/fixture_000.wasm.o
+          # Integer-only fixture: these unused FP rounding constants are absent in WASI.
+          # This is NOT a correct floating-point runtime implementation.
+          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi \\
+            -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 \\
+            -O2 -c -I upstream/runtime generated/fixture_000.c -o generated/fixture_000.wasm.o
           file generated/fixture_000.wasm.o
       - name: Publish diagnostic artifacts
         if: always()
