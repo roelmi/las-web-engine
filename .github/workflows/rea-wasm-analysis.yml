@@ -1,4 +1,4 @@
-name: REA WASM analysis lab
+name: WASM binary inspection (WABT verified)
 on:
   workflow_dispatch:
 permissions:
@@ -38,24 +38,10 @@ jobs:
           console.log(JSON.stringify(data,null,2));
           if(result!==42)process.exit(1);
           NODE
-      - name: REA standalone WebAssembly inspection (experimental)
-        env:
-          REA_WABT_BIN_DIRECTORY: /usr/bin
-        run: |
-          set +e
-          npx -y rea-agents@latest inspect-wasm-artifact "$PWD/dev/recomp-port/safari/fixture.wasm" --json > rea-report/rea-inspection.json 2> rea-report/rea-stderr.txt
-          code=$?
-          echo "$code" > rea-report/rea-exit-code.txt
-          if [ "$code" -ne 0 ]; then
-            echo "::warning::REA inspector did not succeed. See diagnostics; WABT tool version may be incompatible."
-          else
-            echo "REA inspection returned success."
-          fi
-          exit 0
       - name: Upload read-only analysis evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rea-wasm-analysis
+          name: wasm-structure-analysis
           path: rea-report/
           if-no-files-found: warn
