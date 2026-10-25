@@ -1,0 +1,45 @@
+name: LASRecomp generated C to WASM
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Clone upstream
+        run: git clone --depth 1 https://github.com/Nycolazs/LASRecomp-Android-Plus.git upstream
+      - name: Install generator dependencies
+        run: python -m pip install --disable-pip-version-check unicorn lz4 capstone
+      - name: Create clean synthetic NSO
+        run: python dev/recomp-port/make_synthetic_nso.py
+      - name: Generate C using upstream generator
+        run: |
+          mkdir -p generated
+          python upstream/tools/gen.py fixture synthetic.nso 0x7100000000 generated --simd=c --chunk 8 2>&1 | tee generator.log
+      - name: Inspect generated function for traps
+        run: |
+          grep -n -E 'void f_|rt_udf\(|unsupported|trap' generated/fixture_000.c | head -50 || true
+          if grep -q 'rt_udf(c,' generated/fixture_000.c; then
+            echo "::error::Generator emitted unsupported-instruction traps. Cannot claim working function."
+            exit 1
+          fi
+      - name: Compile generated C into WASM object
+        run: |
+          clang --version
+          clang --target=wasm32 -O2 -c -I upstream/runtime generated/fixture_000.c -o generated/fixture_000.wasm.o
+          file generated/fixture_000.wasm.o
+      - name: Publish diagnostic artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lasrecomp-generated-wasm-diagnostics
+          path: |
+            generator.log
+            generated/
+          if-no-files-found: warn
