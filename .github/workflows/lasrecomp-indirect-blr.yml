@@ -29,7 +29,7 @@ jobs:
             exit 1
           fi
           grep -n 'void f_7100000100' generated/fixture_000.c
-          grep -n 'void f_710000010c' generated/fixture_000.c
+          grep -n 'void f_7100000110' generated/fixture_000.c
           grep -n 'rt_dispatch' generated/fixture_000.c
       - name: Compile and link browser-loadable WebAssembly
         run: |
