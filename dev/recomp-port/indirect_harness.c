@@ -3,12 +3,12 @@
 #include <string.h>
 #define CHILD_ADDR UINT64_C(0x7100000110)
 extern void f_7100000100(Cpu *);
-extern void f_710000010c(Cpu *);
+extern void f_7100000110(Cpu *);
 volatile int g_fnprof=0;
 static int dispatches=0, faults=0;
 void fnprof_hit(uint64_t a,uint64_t b,uint64_t d){(void)a;(void)b;(void)d;}
 void rt_dispatch(Cpu *c) {
-  if(c->pc==CHILD_ADDR){dispatches++;f_710000010c(c);}
+  if(c->pc==CHILD_ADDR){dispatches++;f_7100000110(c);}
   else {faults++; }
 }
 int rt_hook(Cpu*c,uint64_t a){(void)c;(void)a;return 0;}
