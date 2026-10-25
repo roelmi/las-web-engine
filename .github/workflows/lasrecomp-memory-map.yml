@@ -9,16 +9,20 @@ jobs:
     timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
+      - name: Install WASI toolchain libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wasi-libc libclang-rt-18-dev-wasm32
       - name: Compile native C memory-map fixture to WASM
         run: |
-          clang --target=wasm32 -O2 -nostdlib -Wl,--no-entry -Wl,--export=reset_map -Wl,--export=store32 -Wl,--export=load32 -Wl,--export=valid -Wl,--export=fault_count -Wl,--export=set_permission_a -Wl,--export-memory -Wl,--allow-undefined dev/recomp-port/memory-map/memory_map.c -o /tmp/guest-map.wasm
+          clang --target=wasm32-wasi -mexec-model=reactor -isystem /usr/include/wasm32-wasi -O2 -Wl,--no-entry -Wl,--export=reset_map -Wl,--export=store32 -Wl,--export=load32 -Wl,--export=valid -Wl,--export=fault_count -Wl,--export=set_permission_a -Wl,--export-memory dev/recomp-port/memory-map/memory_map.c -o /tmp/guest-map.wasm
       - name: Validate two regions and permission behavior
         run: |
           node - <<'NODE'
           const fs=require('fs');
           const bytes=fs.readFileSync('/tmp/guest-map.wasm');
           (async()=>{
-            const {instance}=await WebAssembly.instantiate(bytes,{env:{memset(){},memcpy(){}}});
+            const {instance}=await WebAssembly.instantiate(bytes,{});
             const m=instance.exports,a=0x7100000000n,b=0x7200000000n;
             m.reset_map();
             const tests=[
