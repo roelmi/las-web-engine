@@ -1,0 +1,61 @@
+name: REA WASM analysis lab
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install local WebAssembly disassembler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wabt
+          wasm2wat --version
+          node --version
+      - name: Confirm verified WASM fixture exists
+        run: |
+          test -s dev/recomp-port/safari/fixture.wasm
+          mkdir -p rea-report
+          sha256sum dev/recomp-port/safari/fixture.wasm | tee rea-report/sha256.txt
+      - name: Baseline native WABT validation and inspection
+        run: |
+          wasm-validate dev/recomp-port/safari/fixture.wasm
+          wasm-objdump -x dev/recomp-port/safari/fixture.wasm > rea-report/wasm-sections.txt
+          wasm2wat dev/recomp-port/safari/fixture.wasm -o rea-report/fixture.wat
+          node - <<'NODE' > rea-report/browser-interface.json
+          const fs=require('fs');
+          const b=fs.readFileSync('dev/recomp-port/safari/fixture.wasm');
+          const m=new WebAssembly.Module(b);
+          const i=new WebAssembly.Instance(m,{});
+          const result=i.exports.run_fixture();
+          const data={valid:WebAssembly.validate(b),bytes:b.length,imports:WebAssembly.Module.imports(m),exports:WebAssembly.Module.exports(m),result};
+          console.log(JSON.stringify(data,null,2));
+          if(result!==42)process.exit(1);
+          NODE
+      - name: REA standalone WebAssembly inspection (experimental)
+        env:
+          REA_WABT_BIN_DIRECTORY: /usr/bin
+        run: |
+          set +e
+          npx -y rea-agents@latest inspect-wasm-artifact "$PWD/dev/recomp-port/safari/fixture.wasm" --json > rea-report/rea-inspection.json 2> rea-report/rea-stderr.txt
+          code=$?
+          echo "$code" > rea-report/rea-exit-code.txt
+          if [ "$code" -ne 0 ]; then
+            echo "::warning::REA inspector did not succeed. See diagnostics; WABT tool version may be incompatible."
+          else
+            echo "REA inspection returned success."
+          fi
+          exit 0
+      - name: Upload read-only analysis evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rea-wasm-analysis
+          path: rea-report/
+          if-no-files-found: warn
