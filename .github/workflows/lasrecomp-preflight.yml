@@ -1,0 +1,29 @@
+name: LASRecomp generator preflight
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generator-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out LAS Web Engine
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download original LASRecomp source
+        run: git clone --depth 1 https://github.com/Nycolazs/LASRecomp-Android-Plus.git upstream
+      - name: Install analysis dependencies
+        run: python -m pip install --disable-pip-version-check unicorn lz4
+      - name: Verify upstream generator import and CLI
+        run: |
+          cd upstream/tools
+          python -c "import unicorn, lz4.block; import gen; print('LASRecomp gen.py imports: PASS')"
+          python gen.py --help
+      - name: Report preflight status
+        run: echo "Toolchain preflight passed. No game NSO has been generated or executed."
