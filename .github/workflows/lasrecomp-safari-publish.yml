@@ -19,7 +19,8 @@ jobs:
           git clone --depth 1 https://github.com/Nycolazs/LASRecomp-Android-Plus.git upstream
           python -m pip install unicorn lz4 capstone
           sudo apt-get update -qq
-          sudo apt-get install -y wasi-libc
+          sudo apt-get install -y wasi-libc libclang-rt-18-dev-wasm32
+          test -f /usr/lib/llvm-18/lib/clang/18/lib/wasi/libclang_rt.builtins-wasm32.a
       - name: Generate synthetic program through LASRecomp
         run: |
           python dev/recomp-port/make_synthetic_nso.py
