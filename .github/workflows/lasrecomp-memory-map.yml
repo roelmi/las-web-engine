@@ -1,0 +1,47 @@
+name: LAS Web Engine multi-region guest memory
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile native C memory-map fixture to WASM
+        run: |
+          clang --target=wasm32 -O2 -nostdlib -Wl,--no-entry -Wl,--export=reset_map -Wl,--export=store32 -Wl,--export=load32 -Wl,--export=valid -Wl,--export=fault_count -Wl,--export=set_permission_a -Wl,--export-memory -Wl,--allow-undefined dev/recomp-port/memory-map/memory_map.c -o /tmp/guest-map.wasm
+      - name: Validate two regions and permission behavior
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const bytes=fs.readFileSync('/tmp/guest-map.wasm');
+          (async()=>{
+            const {instance}=await WebAssembly.instantiate(bytes,{env:{memset(){},memcpy(){}}});
+            const m=instance.exports,a=0x7100000000n,b=0x7200000000n;
+            m.reset_map();
+            const tests=[
+              ['region A readable',()=>m.valid(a,4,1)===1],
+              ['region A writable',()=>m.valid(a,4,2)===1],
+              ['region B readable',()=>m.valid(b,4,1)===1],
+              ['region B write denied',()=>m.valid(b,4,2)===0],
+              ['A initial memory',()=>m.load32(a)===0],
+              ['A store',()=>m.store32(a,42)===1],
+              ['A read back',()=>m.load32(a)===42],
+              ['B store denied',()=>m.store32(b,50)===0],
+              ['gap denied',()=>m.valid(a+8192n,4,1)===0],
+              ['A end boundary',()=>m.valid(a+4092n,4,1)===1],
+              ['A crossing boundary denied',()=>m.valid(a+4094n,4,1)===0],
+              ['write protect A',()=>{m.set_permission_a(1);return m.store32(a,9)===0&&m.load32(a)===42}],
+              ['fault count records rejection',()=>m.fault_count()>=2],
+              ['zero permission denies reads',()=>{m.set_permission_a(0);return m.valid(a,4,1)===0}]
+            ];
+            for(const [name,test] of tests){const ok=test();console.log((ok?'PASS':'FAIL')+' '+name);if(!ok)process.exitCode=1;}
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: guest-memory-map-wasm
+          path: /tmp/guest-map.wasm
