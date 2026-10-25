@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Minimal copyright-free NSO fixture with two AArch64 functions and an indirect BLR call.
-Original ARM64: mov w0, #40; blr x3; ret; child: add w0,w0,#2; ret. This is NOT Nintendo content.
+Original ARM64: mov w0,#38; bl child; blr x3; ret; child: add w0,w0,#2; ret. This is NOT Nintendo content.
 """
 from pathlib import Path
 import struct
@@ -9,11 +9,12 @@ def u32(pos,x): struct.pack_into("<I",image,pos,x)
 def u64(pos,x): struct.pack_into("<Q",image,pos,x)
 # NSO text contains headers plus instructions; remaining metadata is rodata, not executable.
 u32(4,0x300)
-u32(0x100,0x52800500) # mov w0,#40
-u32(0x104,0xd63f0060) # blr x3 (target provided by harness)
-u32(0x108,0xd65f03c0) # ret
-u32(0x10c,0x11000800) # add w0,w0,#2
-u32(0x110,0xd65f03c0) # ret
+u32(0x100,0x528004c0) # mov w0,#38
+u32(0x104,0x94000003) # bl child at 0x110 (helps discover function boundary)
+u32(0x108,0xd63f0060) # blr x3 (target provided by harness)
+u32(0x10c,0xd65f03c0) # ret
+u32(0x110,0x11000800) # add w0,w0,#2
+u32(0x114,0xd65f03c0) # ret
 image[0x300:0x304]=b"MOD0"
 for n,target in enumerate([0x340,0x600,0x600,0,0,0]):
     struct.pack_into("<i",image,0x304+n*4,target-0x300)
@@ -28,10 +29,10 @@ raw=bytearray(0x100+0x1000)
 raw[:4]=b"NSO0"
 # text segment is 0x1000 bytes and other two segments empty
 u32raw=lambda o,n:struct.pack_into("<I",raw,o,n)
-u32raw(0x10,0x100);u32raw(0x14,0);u32raw(0x18,0x114)
-u32raw(0x20,0x214);u32raw(0x24,0x114);u32raw(0x28,0xEEC)
+u32raw(0x10,0x100);u32raw(0x14,0);u32raw(0x18,0x118)
+u32raw(0x20,0x218);u32raw(0x24,0x118);u32raw(0x28,0xEE8)
 u32raw(0x30,0x1100);u32raw(0x34,0x1000);u32raw(0x38,0)
-u32raw(0x60,0x114);u32raw(0x64,0xEEC)
+u32raw(0x60,0x118);u32raw(0x64,0xEE8)
 raw[0x40:0x60]=bytes.fromhex("aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899")
 raw[0x100:]=image
 out=Path("synthetic.nso")
