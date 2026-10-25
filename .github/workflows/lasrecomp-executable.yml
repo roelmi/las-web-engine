@@ -33,7 +33,7 @@ jobs:
         run: |
           clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I upstream/runtime -c generated/fixture_000.c -o generated/fixture_000.o
           clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I upstream/runtime -c dev/recomp-port/fixture_harness.c -o generated/harness.o
-          clang --target=wasm32-wasi -Wl,--no-entry -Wl,--export=run_fixture -Wl,--export=dispatch_count -Wl,--export-memory generated/fixture_000.o generated/harness.o -o generated/fixture.wasm
+          clang --target=wasm32-wasi -mexec-model=reactor -Wl,--no-entry -Wl,--export=run_fixture -Wl,--export=dispatch_count -Wl,--export-memory generated/fixture_000.o generated/harness.o -o generated/fixture.wasm
           file generated/fixture.wasm
       - name: Test module with Node WebAssembly engine
         run: |
