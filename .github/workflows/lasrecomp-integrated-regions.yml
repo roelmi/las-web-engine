@@ -1,0 +1,59 @@
+name: LASRecomp integrated permissioned memory
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare upstream and WASI
+        run: |
+          git clone --depth 1 https://github.com/Nycolazs/LASRecomp-Android-Plus.git upstream
+          python -m pip install unicorn lz4 capstone
+          sudo apt-get update -qq
+          sudo apt-get install -y wasi-libc libclang-rt-18-dev-wasm32
+      - name: Recompile copyright-free ARM64 program
+        run: |
+          python dev/recomp-port/make_shared_memory_nso.py
+          mkdir -p generated
+          python upstream/tools/gen.py fixture synthetic.nso 0x7100000000 generated --simd=c --chunk 8
+          if grep -q 'rt_udf(c,' generated/fixture_000.c; then exit 1; fi
+      - name: Build WASM runtime with permissioned regions
+        run: |
+          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I . -I dev/recomp-port/integrated-regions -I upstream/runtime -c generated/fixture_000.c -o generated/code.o
+          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I . -I upstream/runtime -c dev/recomp-port/integrated-regions/harness.c -o generated/harness.o
+          clang --target=wasm32-wasi -mexec-model=reactor -Wl,--no-entry -Wl,--export=run_region_a -Wl,--export=read_region_a -Wl,--export=valid_region generated/code.o generated/harness.o -o generated/integrated.wasm
+      - name: Validate integration
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          (async()=>{
+            const binary=fs.readFileSync('generated/integrated.wasm');
+            const mod=new WebAssembly.Module(binary);
+            if(WebAssembly.Module.imports(mod).length)throw Error('Unresolved imports');
+            const x=new WebAssembly.Instance(mod,{}).exports;
+            const a=0x7100000000n,b=0x7200000000n;
+            const cases=[
+              ['region A readable',()=>x.valid_region(a+16n,4,1)===1],
+              ['region A writable',()=>x.valid_region(a+16n,4,2)===1],
+              ['region B readable',()=>x.valid_region(b+16n,4,1)===1],
+              ['region B write rejected',()=>x.valid_region(b+16n,4,2)===0],
+              ['boundary rejected',()=>x.valid_region(a+4094n,4,1)===0],
+              ['generated ARM64 functions write 42',()=>x.run_region_a()===42],
+              ['read back 42',()=>x.read_region_a()===42]
+            ];
+            for(const [name,fn] of cases){const ok=fn();console.log((ok?'PASS':'FAIL')+' '+name);if(!ok)process.exitCode=1;}
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integrated-permissioned-memory
+          path: generated/
+          if-no-files-found: warn
