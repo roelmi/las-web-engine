@@ -1,0 +1,59 @@
+name: LASRecomp 64-bit guest address test
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  guest-address:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare generator and compiler
+        run: |
+          git clone --depth 1 https://github.com/Nycolazs/LASRecomp-Android-Plus.git upstream
+          python -m pip install unicorn lz4 capstone
+          sudo apt-get update -qq
+          sudo apt-get install -y wasi-libc libclang-rt-18-dev-wasm32
+      - name: Generate synthetic C
+        run: |
+          python dev/recomp-port/make_shared_memory_nso.py
+          mkdir -p generated
+          python upstream/tools/gen.py fixture synthetic.nso 0x7100000000 generated --simd=c --chunk 8
+          if grep -q 'rt_udf(c,' generated/fixture_000.c; then exit 1; fi
+      - name: Compile adapted memory and link WASM
+        run: |
+          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I . -I dev/recomp-port/guest-address -I upstream/runtime -c generated/fixture_000.c -o generated/code.o
+          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I . -I upstream/runtime -c dev/recomp-port/guest-address/harness.c -o generated/harness.o
+          clang --target=wasm32-wasi -mexec-model=reactor -Wl,--no-entry -Wl,--export=run_guest -Wl,--export=valid_guest generated/code.o generated/harness.o -o generated/guest-address.wasm
+      - name: Test translated 64-bit addresses
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          (async()=>{
+            const b=fs.readFileSync('generated/guest-address.wasm');
+            const m=new WebAssembly.Module(b);
+            if(WebAssembly.Module.imports(m).length)throw Error('Unresolved imports');
+            const x=new WebAssembly.Instance(m,{}).exports;
+            const base=0x7100000000n;
+            const cases=[
+              ['valid start',x.valid_guest(base,4)===1],
+              ['valid end',x.valid_guest(base+4092n,4)===1],
+              ['reject below',x.valid_guest(base-1n,4)===0],
+              ['reject crossing end',x.valid_guest(base+4094n,4)===0],
+              ['reject above',x.valid_guest(base+4096n,4)===0],
+              ['generated code stores and loads',x.run_guest()===42]
+            ];
+            for(const [name,ok] of cases){console.log((ok?'PASS':'FAIL')+' '+name);if(!ok)process.exitCode=1}
+          })().catch(e=>{console.error(e);process.exit(1)})
+          NODE
+      - name: Upload diagnostic files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guest-address-fixture
+          path: generated/
+          if-no-files-found: warn
