@@ -1,7 +1,7 @@
 #include "cpu.h"
 #include <stdint.h>
 #include <string.h>
-#define CHILD_ADDR UINT64_C(0x710000010c)
+#define CHILD_ADDR UINT64_C(0x7100000110)
 extern void f_7100000100(Cpu *);
 extern void f_710000010c(Cpu *);
 volatile int g_fnprof=0;
