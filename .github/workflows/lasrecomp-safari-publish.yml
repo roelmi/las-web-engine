@@ -1,0 +1,49 @@
+name: Publish verified WASM Safari preview
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Clone upstream and install dependencies
+        run: |
+          git clone --depth 1 https://github.com/Nycolazs/LASRecomp-Android-Plus.git upstream
+          python -m pip install unicorn lz4 capstone
+          sudo apt-get update -qq
+          sudo apt-get install -y wasi-libc
+      - name: Generate synthetic program through LASRecomp
+        run: |
+          python dev/recomp-port/make_synthetic_nso.py
+          mkdir -p generated
+          python upstream/tools/gen.py fixture synthetic.nso 0x7100000000 generated --simd=c --chunk 8
+          if grep -q 'rt_udf(c,' generated/fixture_000.c; then
+            echo "::error::Generated code contains unsupported instructions"
+            exit 1
+          fi
+      - name: Compile and link real generated code
+        run: |
+          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I upstream/runtime -c generated/fixture_000.c -o generated/fixture_000.o
+          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I upstream/runtime -c dev/recomp-port/fixture_harness.c -o generated/harness.o
+          clang --target=wasm32-wasi -mexec-model=reactor -Wl,--no-entry -Wl,--export=run_fixture -Wl,--export=dispatch_count -Wl,--export-memory generated/fixture_000.o generated/harness.o -o generated/fixture.wasm
+      - name: Validate expected result before publication
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          (async()=>{const bytes=fs.readFileSync('generated/fixture.wasm');const {instance}=await WebAssembly.instantiate(bytes,{});const value=instance.exports.run_fixture();console.log('Result:',value);if(value!==42)process.exit(1)})().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Commit verified WASM into isolated browser preview
+        run: |
+          cp generated/fixture.wasm dev/recomp-port/safari/fixture.wasm
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dev/recomp-port/safari/fixture.wasm
+          if git diff --cached --quiet; then echo "Module already current"; else git commit -m "Publish verified generated WASM fixture for Safari"; git push; fi
