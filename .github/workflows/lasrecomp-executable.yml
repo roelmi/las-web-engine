@@ -1,0 +1,59 @@
+name: LASRecomp executable WASM fixture
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  executable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Clone LASRecomp upstream
+        run: git clone --depth 1 https://github.com/Nycolazs/LASRecomp-Android-Plus.git upstream
+      - name: Install generator dependencies and WASI libc
+        run: |
+          python -m pip install unicorn lz4 capstone
+          sudo apt-get update -qq
+          sudo apt-get install -y wasi-libc libclang-rt-18-dev-wasm32 || sudo apt-get install -y wasi-libc
+      - name: Generate synthetic NSO and original C output
+        run: |
+          python dev/recomp-port/make_synthetic_nso.py
+          mkdir -p generated
+          python upstream/tools/gen.py fixture synthetic.nso 0x7100000000 generated --simd=c --chunk 8 2>&1 | tee generated/generator.log
+          if grep -q 'rt_udf(c,' generated/fixture_000.c; then
+            echo "::error::Unsupported ARM64 instruction in fixture"
+            exit 1
+          fi
+          grep -n 'void f_7100000100' generated/fixture_000.c
+      - name: Compile and link browser-loadable WebAssembly
+        run: |
+          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I upstream/runtime -c generated/fixture_000.c -o generated/fixture_000.o
+          clang --target=wasm32-wasi -isystem /usr/include/wasm32-wasi -DFE_UPWARD=0x800 -DFE_DOWNWARD=0x400 -DFE_TOWARDZERO=0xc00 -O2 -I upstream/runtime -c dev/recomp-port/fixture_harness.c -o generated/harness.o
+          clang --target=wasm32-wasi -Wl,--no-entry -Wl,--export=run_fixture -Wl,--export=dispatch_count -Wl,--export-memory generated/fixture_000.o generated/harness.o -o generated/fixture.wasm
+          file generated/fixture.wasm
+      - name: Test module with Node WebAssembly engine
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          (async()=> {
+            const bytes=fs.readFileSync('generated/fixture.wasm');
+            const imports=WebAssembly.Module.imports(new WebAssembly.Module(bytes));
+            console.log('Imports:',imports);
+            if(imports.length) throw new Error('Unexpected unresolved imports');
+            const {instance}=await WebAssembly.instantiate(bytes,{});
+            const result=instance.exports.run_fixture();
+            console.log('Synthetic ARM64 generated C -> WASM result:',result);
+            if(result!==42) throw new Error('Expected 42, got '+result);
+          })().catch(e=>{console.error(e);process.exit(1);});
+          NODE
+      - name: Upload browser WASM and generated source
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lasrecomp-executable-fixture
+          path: generated/
+          if-no-files-found: warn
