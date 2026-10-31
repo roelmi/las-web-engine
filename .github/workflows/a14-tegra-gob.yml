@@ -1,0 +1,16 @@
+name: A14 Tegra block-linear GOB check
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gob:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test copyright-free GOB layout
+        run: |
+          cd dev/a14-gob
+          cc -std=c11 -O2 -Wall -Wextra -Werror -fsanitize=undefined -fno-omit-frame-pointer tegra_gob.c test_gob_only.c -o /tmp/a14gob
+          /tmp/a14gob
